@@ -30,8 +30,9 @@ pub fn convert_image(
                 .map_err(|e| JsValue::from_str(&format!("Failed to write PNG image: {}", e)))?;
         }
         "jpeg" | "jpg" => {
+            let rgb_img = resized_img.to_rgb8();
             let encoder = JpegEncoder::new(&mut buffer);
-            encoder.write_image(&resized_img.to_rgba8(), resized_img.width(), resized_img.height(), ColorType::Rgba8.into())
+            encoder.write_image(&rgb_img, rgb_img.width(), rgb_img.height(), ColorType::Rgb8.into())
                 .map_err(|e| JsValue::from_str(&format!("Failed to write JPEG image: {}", e)))?;
         }
         "webp" => {
