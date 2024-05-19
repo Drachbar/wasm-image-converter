@@ -1,24 +1,46 @@
-use image::{DynamicImage, ImageOutputFormat};
-use wasm_bindgen::prelude::wasm_bindgen;
+use std::io::Cursor;
+
+use image::{ColorType, ImageEncoder, load_from_memory};
+use image::codecs::jpeg::JpegEncoder;
+use image::codecs::png::PngEncoder;
+use image::codecs::webp::WebPEncoder;
+use image::imageops::FilterType;
+use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-pub fn convert_image(input: &[u8], width: u32, height: u32, format: &str) -> Vec<u8> {
-    // Ladda bilden
-    let img = image::load_from_memory(input).expect("Failed to load image");
+pub fn convert_image(
+    data: &[u8],
+    width: u32,
+    height: u32,
+    format: &str
+) -> Result<Vec<u8>, JsValue> {
+    // Ladda bilden från byte-datan
+    let img = load_from_memory(data)
+        .map_err(|e| JsValue::from_str(&format!("Failed to load image: {}", e)))?;
 
-    // Skapa en ny bild beroende på format
-    let new_img = match format {
-        "grayscale" => img.grayscale(),
-        "invert" => {
-            let mut img = img.to_rgba8();
-            image::imageops::invert(&mut img);
-            DynamicImage::ImageRgba8(img)
-        },
-        _ => img,
+    // Ändra storlek på bilden
+    let resized_img = img.resize_exact(width, height, FilterType::Lanczos3);
+
+    // Spara bilden i det önskade formatet
+    let mut buffer = Cursor::new(Vec::new());
+    match format {
+        "png" => {
+            let encoder = PngEncoder::new(&mut buffer);
+            encoder.write_image(&resized_img.to_rgba8(), resized_img.width(), resized_img.height(), ColorType::Rgba8.into())
+                .map_err(|e| JsValue::from_str(&format!("Failed to write PNG image: {}", e)))?;
+        }
+        "jpeg" | "jpg" => {
+            let encoder = JpegEncoder::new(&mut buffer);
+            encoder.write_image(&resized_img.to_rgba8(), resized_img.width(), resized_img.height(), ColorType::Rgba8.into())
+                .map_err(|e| JsValue::from_str(&format!("Failed to write JPEG image: {}", e)))?;
+        }
+        "webp" => {
+            let encoder = WebPEncoder::new_lossless(&mut buffer);
+            encoder.encode(&resized_img.to_rgba8(), resized_img.width(), resized_img.height(), ColorType::Rgba8.into())
+                .map_err(|e| JsValue::from_str(&format!("Failed to write WebP image: {}", e)))?;
+        }
+        _ => return Err(JsValue::from_str("Unsupported format")),
     };
 
-    // Konvertera bilden till en byte-vektor
-    let mut output = Vec::new();
-    new_img.write_to(&mut output, ImageOutputFormat::Png).expect("Failed to write image");
-    output
+    Ok(buffer.into_inner())
 }
